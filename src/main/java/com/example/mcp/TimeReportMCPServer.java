@@ -22,6 +22,7 @@ public class TimeReportMCPServer {
 
     private final HttpServer server;
     private final TimeReportMCP mcp;
+    private final SearchMCP searchMcp;
 
     /**
      * Creates a new server bound to the given port using a default
@@ -30,7 +31,7 @@ public class TimeReportMCPServer {
      * @param port the port to bind to, or {@code 0} for any free port
      */
     public TimeReportMCPServer(int port) throws IOException {
-        this(new TimeReportMCP(), port);
+        this(new TimeReportMCP(), new SearchMCP(), port);
     }
 
     /**
@@ -40,10 +41,19 @@ public class TimeReportMCPServer {
      * @param port the port to bind to
      */
     public TimeReportMCPServer(TimeReportMCP mcp, int port) throws IOException {
+        this(mcp, new SearchMCP(), port);
+    }
+
+    /**
+     * Creates a new server bound to the given port using the provided MCPs.
+     */
+    public TimeReportMCPServer(TimeReportMCP mcp, SearchMCP searchMcp, int port) throws IOException {
         this.mcp = mcp;
+        this.searchMcp = searchMcp;
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/.well-known/mcp.json", new ManifestHandler());
         server.createContext("/time-report", new TimeReportHandler());
+        server.createContext("/search", new SearchHandler());
     }
 
     /** Starts the server. */
@@ -72,7 +82,8 @@ public class TimeReportMCPServer {
 
             String json = "{\"version\":\"1.0\"," +
                     "\"description\":\"TimeReport MCP endpoints\"," +
-                    "\"endpoints\":[\"/time-report?year={year}&month={month}\"]}";
+                    "\"endpoints\":[\"/time-report?year={year}&month={month}\"," +
+                    "\"/search?query={query}\"]}";
 
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -140,6 +151,63 @@ public class TimeReportMCPServer {
                 }
             }
             sb.append(']');
+            return sb.toString();
+        }
+    }
+
+    /** Handler that exposes a very small search API as JSON. */
+    class SearchHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            URI uri = exchange.getRequestURI();
+            Map<String, String> params = parseQuery(uri.getRawQuery());
+            String query = params.getOrDefault("query", "");
+
+            List<SearchResult> results = searchMcp.search(query);
+            String json = toJson(results);
+
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+
+        private Map<String, String> parseQuery(String query) {
+            if (query == null || query.isEmpty()) {
+                return Map.of();
+            }
+            return Stream.of(query.split("&"))
+                    .map(s -> s.split("=", 2))
+                    .filter(arr -> arr.length == 2)
+                    .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
+        }
+
+        private String toJson(List<SearchResult> results) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('{').append("\"results\":[");
+            for (int i = 0; i < results.size(); i++) {
+                SearchResult r = results.get(i);
+                sb.append('{')
+                        .append("\"id\":\"").append(r.getId()).append("\",")
+                        .append("\"title\":\"").append(r.getTitle()).append("\",")
+                        .append("\"text\":\"").append(r.getText()).append("\",");
+                if (r.getUrl() != null) {
+                    sb.append("\"url\":\"").append(r.getUrl()).append("\"}");
+                } else {
+                    sb.append("\"url\":null}");
+                }
+                if (i < results.size() - 1) {
+                    sb.append(',');
+                }
+            }
+            sb.append("]}");
             return sb.toString();
         }
     }

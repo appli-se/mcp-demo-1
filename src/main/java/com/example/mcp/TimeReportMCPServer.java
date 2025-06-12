@@ -51,10 +51,14 @@ public class TimeReportMCPServer {
         this.mcp = mcp;
         this.searchMcp = searchMcp;
         server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/.well-known/mcp.json", new ManifestHandler());
-        server.createContext("/time-report", new TimeReportHandler());
-        server.createContext("/search", new SearchHandler());
-        server.createContext("/fetch", new FetchHandler());
+        server.createContext("/.well-known/mcp.json",
+                new LoggingHandler(new ManifestHandler()));
+        server.createContext("/time-report",
+                new LoggingHandler(new TimeReportHandler()));
+        server.createContext("/search",
+                new LoggingHandler(new SearchHandler()));
+        server.createContext("/fetch",
+                new LoggingHandler(new FetchHandler()));
     }
 
     /** Starts the server. */
@@ -70,6 +74,23 @@ public class TimeReportMCPServer {
     /** Returns the port the server is bound to. */
     public int getPort() {
         return server.getAddress().getPort();
+    }
+
+    /** Simple handler that logs inbound requests before delegating. */
+    static class LoggingHandler implements HttpHandler {
+        private final HttpHandler delegate;
+
+        LoggingHandler(HttpHandler delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String method = exchange.getRequestMethod();
+            URI uri = exchange.getRequestURI();
+            System.out.println("[DEBUG] Received " + method + " " + uri);
+            delegate.handle(exchange);
+        }
     }
 
     /** Handler returning a simple manifest describing available endpoints. */

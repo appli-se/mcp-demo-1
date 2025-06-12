@@ -29,7 +29,7 @@ public class SearchMCPServerTest {
 
     @Test
     public void testSearchEndpoint() throws Exception {
-        String url = "http://localhost:" + server.getPort() + "/search?query=time";
+        String url = "http://localhost:" + server.getPort() + "/sse/search?query=time";
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
         assertEquals(200, conn.getResponseCode());
@@ -45,7 +45,7 @@ public class SearchMCPServerTest {
 
     @Test
     public void testFetchEndpoint() throws Exception {
-        String url = "http://localhost:" + server.getPort() + "/fetch?id=1";
+        String url = "http://localhost:" + server.getPort() + "/sse/fetch?id=1";
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
         assertEquals(200, conn.getResponseCode());

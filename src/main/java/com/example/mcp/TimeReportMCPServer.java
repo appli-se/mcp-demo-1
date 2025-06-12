@@ -6,6 +6,8 @@ import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -104,10 +106,61 @@ public class TimeReportMCPServer {
                 return;
             }
 
-            String json = "{\"version\":\"1.0\"," +
-                    "\"description\":\"TimeReport MCP endpoints\"," +
-                    "\"endpoints\":[\"" + BASE_PATH + "/time-report?year={year}&month={month}\"," +
-                    "\"" + BASE_PATH + "/search?query={query}\"]}";
+            String json = "{" +
+                    "\"version\": \"1.0\"," +
+                    "\"description\": \"MCP tool manifest providing time reporting and search functionalities.\"," +
+                    "\"tools\": [" +
+                    "{" +
+                    "\"name\": \"getTimeReportStats\"," +
+                    "\"description\": \"Fetches time report statistics for a given year and month.\"," +
+                    "\"base_path\": \"" + BASE_PATH + "/time-report\"," +
+                    "\"parameters\": {" +
+                    "\"type\": \"object\"," +
+                    "\"properties\": {" +
+                    "\"year\": {" +
+                    "\"type\": \"integer\"," +
+                    "\"description\": \"The year for the report.\"" +
+                    "}," +
+                    "\"month\": {" +
+                    "\"type\": \"integer\"," +
+                    "\"description\": \"The month for the report (1-12).\"" +
+                    "}" +
+                    "}," +
+                    "\"required\": [\"year\", \"month\"]" +
+                    "}" +
+                    "}," +
+                    "{" +
+                    "\"name\": \"searchContent\"," +
+                    "\"description\": \"Searches for content based on a query string.\"," +
+                    "\"base_path\": \"" + BASE_PATH + "/search\"," +
+                    "\"parameters\": {" +
+                    "\"type\": \"object\"," +
+                    "\"properties\": {" +
+                    "\"query\": {" +
+                    "\"type\": \"string\"," +
+                    "\"description\": \"The search query.\"" +
+                    "}" +
+                    "}," +
+                    "\"required\": [\"query\"]" +
+                    "}" +
+                    "}," +
+                    "{" +
+                    "\"name\": \"fetchContent\"," +
+                    "\"description\": \"Fetches a specific content item by its ID.\"," +
+                    "\"base_path\": \"" + BASE_PATH + "/fetch\"," +
+                    "\"parameters\": {" +
+                    "\"type\": \"object\"," +
+                    "\"properties\": {" +
+                    "\"id\": {" +
+                    "\"type\": \"string\"," +
+                    "\"description\": \"The ID of the content to fetch.\"" +
+                    "}" +
+                    "}," +
+                    "\"required\": [\"id\"]" +
+                    "}" +
+                    "}" +
+                    "]" +
+                    "}";
 
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -162,20 +215,8 @@ public class TimeReportMCPServer {
         }
 
         private String toJson(List<TimeReportEntry> entries) {
-            StringBuilder sb = new StringBuilder();
-            sb.append('[');
-            for (int i = 0; i < entries.size(); i++) {
-                TimeReportEntry e = entries.get(i);
-                sb.append('{')
-                        .append("\"signature\":\"").append(e.getSignature()).append("\",")
-                        .append("\"hours\":").append(e.getHours())
-                        .append('}');
-                if (i < entries.size() - 1) {
-                    sb.append(',');
-                }
-            }
-            sb.append(']');
-            return sb.toString();
+            Gson gson = new GsonBuilder().create();
+            return gson.toJson(entries);
         }
     }
 
@@ -214,25 +255,8 @@ public class TimeReportMCPServer {
         }
 
         private String toJson(List<SearchResult> results) {
-            StringBuilder sb = new StringBuilder();
-            sb.append('{').append("\"results\":[");
-            for (int i = 0; i < results.size(); i++) {
-                SearchResult r = results.get(i);
-                sb.append('{')
-                        .append("\"id\":\"").append(r.getId()).append("\",")
-                        .append("\"title\":\"").append(r.getTitle()).append("\",")
-                        .append("\"text\":\"").append(r.getText()).append("\",");
-                if (r.getUrl() != null) {
-                    sb.append("\"url\":\"").append(r.getUrl()).append("\"}");
-                } else {
-                    sb.append("\"url\":null}");
-                }
-                if (i < results.size() - 1) {
-                    sb.append(',');
-                }
-            }
-            sb.append("]}");
-            return sb.toString();
+            Gson gson = new GsonBuilder().create();
+            return gson.toJson(Map.of("results", results));
         }
     }
 
@@ -275,34 +299,9 @@ public class TimeReportMCPServer {
                     .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
         }
 
-        private String toJson(SearchResult r) {
-            StringBuilder sb = new StringBuilder();
-            sb.append('{')
-                    .append("\"id\":\"").append(r.getId()).append("\",")
-                    .append("\"title\":\"").append(r.getTitle()).append("\",")
-                    .append("\"text\":\"").append(r.getText()).append("\",");
-            if (r.getUrl() != null) {
-                sb.append("\"url\":\"").append(r.getUrl()).append("\",");
-            } else {
-                sb.append("\"url\":null,");
-            }
-            if (r.getMetadata() != null) {
-                sb.append("\"metadata\":{");
-                int i = 0;
-                for (Map.Entry<String, String> e : r.getMetadata().entrySet()) {
-                    sb.append('\"').append(e.getKey()).append('\"').append(':')
-                            .append('\"').append(e.getValue()).append('\"');
-                    if (i < r.getMetadata().size() - 1) {
-                        sb.append(',');
-                    }
-                    i++;
-                }
-                sb.append('}');
-            } else {
-                sb.append("\"metadata\":null");
-            }
-            sb.append('}');
-            return sb.toString();
+        private String toJson(SearchResult result) {
+            Gson gson = new GsonBuilder().create();
+            return gson.toJson(result);
         }
     }
 

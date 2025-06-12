@@ -42,4 +42,22 @@ public class SearchMCPServerTest {
         String body = sb.toString();
         assertTrue(body.contains("\"results\""));
     }
+
+    @Test
+    public void testFetchEndpoint() throws Exception {
+        String url = "http://localhost:" + server.getPort() + "/fetch?id=1";
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestMethod("GET");
+        assertEquals(200, conn.getResponseCode());
+        BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        StringBuilder sb = new StringBuilder();
+        String line;
+        while ((line = reader.readLine()) != null) {
+            sb.append(line);
+        }
+        String body = sb.toString();
+        assertTrue(body.contains("\"id\""));
+        assertTrue(body.contains("\"title\""));
+        assertTrue(body.contains("\"text\""));
+    }
 }

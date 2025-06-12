@@ -54,6 +54,7 @@ public class TimeReportMCPServer {
         server.createContext("/.well-known/mcp.json", new ManifestHandler());
         server.createContext("/time-report", new TimeReportHandler());
         server.createContext("/search", new SearchHandler());
+        server.createContext("/fetch", new FetchHandler());
     }
 
     /** Starts the server. */
@@ -208,6 +209,76 @@ public class TimeReportMCPServer {
                 }
             }
             sb.append("]}");
+            return sb.toString();
+        }
+    }
+
+    /** Handler that fetches a single search result by id. */
+    class FetchHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            URI uri = exchange.getRequestURI();
+            Map<String, String> params = parseQuery(uri.getRawQuery());
+            String id = params.get("id");
+
+            SearchResult result = searchMcp.fetch(id);
+            if (result == null) {
+                exchange.sendResponseHeaders(404, -1);
+                return;
+            }
+
+            String json = toJson(result);
+
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
+
+        private Map<String, String> parseQuery(String query) {
+            if (query == null || query.isEmpty()) {
+                return Map.of();
+            }
+            return Stream.of(query.split("&"))
+                    .map(s -> s.split("=", 2))
+                    .filter(arr -> arr.length == 2)
+                    .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
+        }
+
+        private String toJson(SearchResult r) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('{')
+                    .append("\"id\":\"").append(r.getId()).append("\",")
+                    .append("\"title\":\"").append(r.getTitle()).append("\",")
+                    .append("\"text\":\"").append(r.getText()).append("\",");
+            if (r.getUrl() != null) {
+                sb.append("\"url\":\"").append(r.getUrl()).append("\",");
+            } else {
+                sb.append("\"url\":null,");
+            }
+            if (r.getMetadata() != null) {
+                sb.append("\"metadata\":{");
+                int i = 0;
+                for (Map.Entry<String, String> e : r.getMetadata().entrySet()) {
+                    sb.append('\"').append(e.getKey()).append('\"').append(':')
+                            .append('\"').append(e.getValue()).append('\"');
+                    if (i < r.getMetadata().size() - 1) {
+                        sb.append(',');
+                    }
+                    i++;
+                }
+                sb.append('}');
+            } else {
+                sb.append("\"metadata\":null");
+            }
+            sb.append('}');
             return sb.toString();
         }
     }

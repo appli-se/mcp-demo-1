@@ -1,7 +1,9 @@
 package com.example.mcp;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Very small MCP providing search results for demonstration purposes.
@@ -9,10 +11,13 @@ import java.util.List;
 public class SearchMCP {
 
     private final List<SearchResult> fixtures = new ArrayList<>();
+    private final Map<String, SearchResult> fetchFixtures = new HashMap<>();
 
     public SearchMCP() {
-        fixtures.add(new SearchResult("1", "Time Report Overview",
-                "Overview of the TimeReport MCP demo.", null));
+        SearchResult r = new SearchResult("1", "Time Report Overview",
+                "Overview of the TimeReport MCP demo.", null);
+        fixtures.add(r);
+        fetchFixtures.put(r.getId(), r);
     }
 
     /**
@@ -29,5 +34,15 @@ public class SearchMCP {
             return new ArrayList<>(fixtures);
         }
         return new ArrayList<>();
+    }
+
+    /**
+     * Fetches a single result by id, or {@code null} if not found.
+     */
+    public SearchResult fetch(String id) {
+        if (id == null) {
+            return null;
+        }
+        return fetchFixtures.get(id);
     }
 }

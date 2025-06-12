@@ -1,0 +1,10 @@
+com/example/mcp/TimeReportMCP.class
+com/example/mcp/SearchResult.class
+com/example/mcp/TimeReportMCPServer$FetchHandler.class
+com/example/mcp/TimeReportMCPServer.class
+com/example/mcp/TimeReportMCPServer$SearchHandler.class
+com/example/mcp/TimeReportEntry.class
+com/example/mcp/TimeReportMCPServer$TimeReportHandler.class
+com/example/mcp/TimeReportMCPServer$ManifestHandler.class
+com/example/mcp/SearchMCP.class
+com/example/mcp/TimeReportMCPServer$LoggingHandler.class

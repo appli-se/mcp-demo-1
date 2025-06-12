@@ -32,7 +32,7 @@ public class TimeReportMCPServerTest {
 
     @Test
     public void testManifestEndpoint() throws Exception {
-        String url = "http://localhost:" + server.getPort() + "/.well-known/mcp.json";
+        String url = "http://localhost:" + server.getPort() + "/sse/.well-known/mcp.json";
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
         assertEquals(200, conn.getResponseCode());

@@ -20,6 +20,8 @@ import java.util.stream.Stream;
  */
 public class TimeReportMCPServer {
 
+    private static final String BASE_PATH = "/sse";
+
     private final HttpServer server;
     private final TimeReportMCP mcp;
     private final SearchMCP searchMcp;
@@ -51,13 +53,13 @@ public class TimeReportMCPServer {
         this.mcp = mcp;
         this.searchMcp = searchMcp;
         server = HttpServer.create(new InetSocketAddress(port), 0);
-        server.createContext("/.well-known/mcp.json",
+        server.createContext(BASE_PATH + "/.well-known/mcp.json",
                 new LoggingHandler(new ManifestHandler()));
-        server.createContext("/time-report",
+        server.createContext(BASE_PATH + "/time-report",
                 new LoggingHandler(new TimeReportHandler()));
-        server.createContext("/search",
+        server.createContext(BASE_PATH + "/search",
                 new LoggingHandler(new SearchHandler()));
-        server.createContext("/fetch",
+        server.createContext(BASE_PATH + "/fetch",
                 new LoggingHandler(new FetchHandler()));
     }
 
@@ -104,8 +106,8 @@ public class TimeReportMCPServer {
 
             String json = "{\"version\":\"1.0\"," +
                     "\"description\":\"TimeReport MCP endpoints\"," +
-                    "\"endpoints\":[\"/time-report?year={year}&month={month}\"," +
-                    "\"/search?query={query}\"]}";
+                    "\"endpoints\":[\"" + BASE_PATH + "/time-report?year={year}&month={month}\"," +
+                    "\"" + BASE_PATH + "/search?query={query}\"]}";
 
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");

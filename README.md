@@ -28,12 +28,12 @@ Alternatively you can run the class directly from your IDE or the compiled class
 
 ## Endpoints
 
-This demonstration exposes two HTTP endpoints:
+This demonstration exposes two HTTP endpoints under the `/sse` path:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/.well-known/mcp.json` | `GET` | Returns a JSON manifest describing the MCP implementation. |
-| `/time-report?year=YYYY&month=MM` | `GET` | Returns time report statistics for the given year and month in JSON format. |
+| `/sse/.well-known/mcp.json` | `GET` | Returns a JSON manifest describing the MCP implementation. |
+| `/sse/time-report?year=YYYY&month=MM` | `GET` | Returns time report statistics for the given year and month in JSON format. |
 
 ### Manifest format
 
@@ -43,13 +43,13 @@ The manifest endpoint returns JSON similar to:
 {
   "version": "1.0",
   "description": "TimeReport MCP endpoints",
-  "endpoints": ["/stats/{year}/{month}"]
+  "endpoints": ["/sse/time-report?year={year}&month={month}"]
 }
 ```
 
 ### Time report response
 
-Querying `/time-report` responds with an array of objects:
+Querying `/sse/time-report` responds with an array of objects:
 
 ```json
 [

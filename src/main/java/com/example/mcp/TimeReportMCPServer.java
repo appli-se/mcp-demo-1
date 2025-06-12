@@ -3,11 +3,16 @@ package com.example.mcp;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-
-import java.io.IOException;
-import java.io.OutputStream;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
+import com.example.mcp.JsonRpcRequest;
+import com.example.mcp.JsonRpcResponse;
+import com.example.mcp.JsonRpcErrorObject;
+import com.example.mcp.JsonRpcErrorCodes;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +22,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+
 /**
  * Simple HTTP server that exposes endpoints for the {@link TimeReportMCP}.
  */
@@ -25,6 +31,7 @@ public class TimeReportMCPServer {
     private static final String BASE_PATH = "/sse";
 
     private final HttpServer server;
+    // These fields are kept as they are passed to MainSsePostHandler.
     private final TimeReportMCP mcp;
     private final SearchMCP searchMcp;
 
@@ -54,15 +61,17 @@ public class TimeReportMCPServer {
     public TimeReportMCPServer(TimeReportMCP mcp, SearchMCP searchMcp, int port) throws IOException {
         this.mcp = mcp;
         this.searchMcp = searchMcp;
+
         server = HttpServer.create(new InetSocketAddress(port), 0);
+
+        // Path for manifest, e.g., /sse/.well-known/mcp.json
+        // (ManifestHandler was updated in a previous subtask to reflect the single /sse endpoint)
         server.createContext(BASE_PATH + "/.well-known/mcp.json",
                 new LoggingHandler(new ManifestHandler()));
-        server.createContext(BASE_PATH + "/time-report",
-                new LoggingHandler(new TimeReportHandler()));
-        server.createContext(BASE_PATH + "/search",
-                new LoggingHandler(new SearchHandler()));
-        server.createContext(BASE_PATH + "/fetch",
-                new LoggingHandler(new FetchHandler()));
+
+        // Main tool invocation endpoint, e.g., /sse (handles POST)
+        server.createContext(BASE_PATH, // BASE_PATH is typically "/sse"
+                new LoggingHandler(new MainSsePostHandler(mcp, searchMcp)));
     }
 
     /** Starts the server. */
@@ -107,60 +116,50 @@ public class TimeReportMCPServer {
             }
 
             String json = "{" +
-                    "\"version\": \"1.0\"," +
-                    "\"description\": \"MCP tool manifest providing time reporting and search functionalities.\"," +
-                    "\"tools\": [" +
+                "\"version\": \"1.2\"," +
+                "\"description\": \"MCP service manifest defining JSON-RPC 2.0 methods.\"," +
+                "\"service_endpoint\": {" +
+                    "\"path\": \"" + BASE_PATH + "\"," +
+                    "\"protocol\": \"json-rpc-2.0\"," +
+                    "\"http_method\": \"POST\"" +
+                "}," +
+                "\"methods\": [" +
                     "{" +
-                    "\"name\": \"getTimeReportStats\"," +
-                    "\"description\": \"Fetches time report statistics for a given year and month.\"," +
-                    "\"base_path\": \"" + BASE_PATH + "/time-report\"," +
-                    "\"parameters\": {" +
-                    "\"type\": \"object\"," +
-                    "\"properties\": {" +
-                    "\"year\": {" +
-                    "\"type\": \"integer\"," +
-                    "\"description\": \"The year for the report.\"" +
-                    "}," +
-                    "\"month\": {" +
-                    "\"type\": \"integer\"," +
-                    "\"description\": \"The month for the report (1-12).\"" +
-                    "}" +
-                    "}," +
-                    "\"required\": [\"year\", \"month\"]" +
-                    "}" +
+                        "\"name\": \"getTimeReportStats\"," +
+                        "\"description\": \"Fetches time report statistics for a given year and month.\"," +
+                        "\"params_schema\": {" + // Renamed from parameters_schema for consistency with example, though task said "parameters_schema"
+                            "\"type\": \"object\"," +
+                            "\"properties\": {" +
+                                "\"year\": {\"type\": \"integer\", \"description\": \"The year for the report.\"}," +
+                                "\"month\": {\"type\": \"integer\", \"description\": \"The month for the report (1-12).\"}" +
+                            "}," +
+                            "\"required\": [\"year\", \"month\"]" +
+                        "}" +
                     "}," +
                     "{" +
-                    "\"name\": \"searchContent\"," +
-                    "\"description\": \"Searches for content based on a query string.\"," +
-                    "\"base_path\": \"" + BASE_PATH + "/search\"," +
-                    "\"parameters\": {" +
-                    "\"type\": \"object\"," +
-                    "\"properties\": {" +
-                    "\"query\": {" +
-                    "\"type\": \"string\"," +
-                    "\"description\": \"The search query.\"" +
-                    "}" +
-                    "}," +
-                    "\"required\": [\"query\"]" +
-                    "}" +
+                        "\"name\": \"searchContent\"," +
+                        "\"description\": \"Searches for content based on a query string.\"," +
+                        "\"params_schema\": {" +
+                            "\"type\": \"object\"," +
+                            "\"properties\": {" +
+                                "\"query\": {\"type\": \"string\", \"description\": \"The search query.\"}" +
+                            "}," +
+                            "\"required\": [\"query\"]" +
+                        "}" +
                     "}," +
                     "{" +
-                    "\"name\": \"fetchContent\"," +
-                    "\"description\": \"Fetches a specific content item by its ID.\"," +
-                    "\"base_path\": \"" + BASE_PATH + "/fetch\"," +
-                    "\"parameters\": {" +
-                    "\"type\": \"object\"," +
-                    "\"properties\": {" +
-                    "\"id\": {" +
-                    "\"type\": \"string\"," +
-                    "\"description\": \"The ID of the content to fetch.\"" +
+                        "\"name\": \"fetchContent\"," +
+                        "\"description\": \"Fetches a specific content item by its ID.\"," +
+                        "\"params_schema\": {" +
+                            "\"type\": \"object\"," +
+                            "\"properties\": {" +
+                                "\"id\": {\"type\": \"string\", \"description\": \"The ID of the content to fetch.\"}" +
+                            "}," +
+                            "\"required\": [\"id\"]" +
+                        "}" +
                     "}" +
-                    "}," +
-                    "\"required\": [\"id\"]" +
-                    "}" +
-                    "}" +
-                    "]" +
-                    "}";
+                "]" +
+            "}";
 
             byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
@@ -171,137 +170,164 @@ public class TimeReportMCPServer {
         }
     }
 
-    /** Handler that exposes time report statistics as JSON. */
-    class TimeReportHandler implements HttpHandler {
+    static class MainSsePostHandler implements HttpHandler {
+        private final TimeReportMCP timeReportMcp;
+        private final SearchMCP searchMcp;
+        private final Gson gson;
+
+        MainSsePostHandler(TimeReportMCP timeReportMcp, SearchMCP searchMcp) {
+            this.timeReportMcp = timeReportMcp;
+            this.searchMcp = searchMcp;
+            this.gson = new GsonBuilder().create();
+        }
+
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            if (!"GET".equals(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendHttpErrorResponse(exchange, 405, "Method Not Allowed. Only POST is supported for JSON-RPC.");
                 return;
             }
-            URI uri = exchange.getRequestURI();
-            Map<String, String> params = parseQuery(uri.getRawQuery());
-            int year = parseInt(params.get("year"), YearMonth.now().getYear());
-            int month = parseInt(params.get("month"), YearMonth.now().getMonthValue());
 
-            List<TimeReportEntry> entries = mcp.getTimeReportStats(year, month);
-            String json = toJson(entries);
+            Object requestId = null;
 
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
-            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, bytes.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(bytes);
-            }
-        }
-
-        private Map<String, String> parseQuery(String query) {
-            if (query == null || query.isEmpty()) {
-                return Map.of();
-            }
-            return Stream.of(query.split("&"))
-                    .map(s -> s.split("=", 2))
-                    .filter(arr -> arr.length == 2)
-                    .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
-        }
-
-        private int parseInt(String value, int defaultValue) {
-            if (value == null) return defaultValue;
             try {
-                return Integer.parseInt(value);
-            } catch (NumberFormatException e) {
-                return defaultValue;
+                String requestBodyString;
+                try (InputStream requestBodyStream = exchange.getRequestBody()) {
+                    requestBodyString = new String(requestBodyStream.readAllBytes(), StandardCharsets.UTF_8);
+                } catch (IOException e) {
+                    System.err.println("Error reading request body: " + e.getMessage());
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.PARSE_ERROR, "Failed to read request body.", e.getMessage());
+                    sendJsonRpcErrorResponse(exchange, error, null);
+                    return;
+                }
+
+                if (requestBodyString.isEmpty()) {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_REQUEST, "Request body is empty.", null);
+                    sendJsonRpcErrorResponse(exchange, error, null);
+                    return;
+                }
+
+                JsonRpcRequest jsonRpcRequest;
+                try {
+                    jsonRpcRequest = gson.fromJson(requestBodyString, JsonRpcRequest.class);
+                    if (jsonRpcRequest != null) {
+                        requestId = jsonRpcRequest.getId();
+                    } else {
+                        JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.PARSE_ERROR, "Parse error: Malformed JSON or input was 'null'.", requestBodyString);
+                        sendJsonRpcErrorResponse(exchange, error, null);
+                        return;
+                    }
+                } catch (JsonSyntaxException e) {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.PARSE_ERROR, "Parse error: " + e.getMessage(), requestBodyString);
+                    sendJsonRpcErrorResponse(exchange, error, null);
+                    return;
+                }
+
+                if (jsonRpcRequest.getJsonrpc() == null || !jsonRpcRequest.getJsonrpc().equals("2.0")) {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_REQUEST, "'jsonrpc' version must be '2.0'.", jsonRpcRequest.getJsonrpc());
+                    sendJsonRpcErrorResponse(exchange, error, requestId);
+                    return;
+                }
+
+                if (jsonRpcRequest.getMethod() == null || jsonRpcRequest.getMethod().trim().isEmpty()) {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_REQUEST, "'method' must be provided.", jsonRpcRequest.getMethod());
+                    sendJsonRpcErrorResponse(exchange, error, requestId);
+                    return;
+                }
+
+                String methodName = jsonRpcRequest.getMethod();
+                Object paramsObject = jsonRpcRequest.getParams();
+                Map<String, Object> paramsMap = null;
+
+                if (paramsObject == null) {
+                    paramsMap = Map.of();
+                } else if (paramsObject instanceof Map) {
+                    paramsMap = (Map<String, Object>) paramsObject;
+                } else {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_PARAMS, "Invalid params: Parameters must be a JSON object or null.", paramsObject.getClass().getName());
+                    sendJsonRpcErrorResponse(exchange, error, requestId);
+                    return;
+                }
+
+                Object resultPayload;
+                try {
+                    switch (methodName) {
+                        case "getTimeReportStats":
+                            if (!paramsMap.containsKey("year") || !paramsMap.containsKey("month")) {
+                                JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_PARAMS, "Missing 'year' or 'month' parameter for getTimeReportStats.", paramsMap);
+                                sendJsonRpcErrorResponse(exchange, error, requestId);
+                                return;
+                            }
+                            int year = ((Number) paramsMap.get("year")).intValue();
+                            int month = ((Number) paramsMap.get("month")).intValue();
+                            resultPayload = timeReportMcp.getTimeReportStats(year, month);
+                            break;
+                        case "searchContent":
+                            if (!paramsMap.containsKey("query")) {
+                                JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_PARAMS, "Missing 'query' parameter for searchContent.", paramsMap);
+                                sendJsonRpcErrorResponse(exchange, error, requestId);
+                                return;
+                            }
+                            String query = (String) paramsMap.get("query");
+                            resultPayload = Map.of("results", searchMcp.search(query));
+                            break;
+                        case "fetchContent":
+                            if (!paramsMap.containsKey("id")) {
+                                JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_PARAMS, "Missing 'id' parameter for fetchContent.", paramsMap);
+                                sendJsonRpcErrorResponse(exchange, error, requestId);
+                                return;
+                            }
+                            String id = (String) paramsMap.get("id");
+                            resultPayload = searchMcp.fetch(id);
+                            break;
+                        default:
+                            JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.METHOD_NOT_FOUND, "Method not found: " + methodName, methodName);
+                            sendJsonRpcErrorResponse(exchange, error, requestId);
+                            return;
+                    }
+                } catch (ClassCastException | NullPointerException e) {
+                    JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INVALID_PARAMS, "Invalid parameter type or structure: " + e.getMessage(), paramsMap);
+                    sendJsonRpcErrorResponse(exchange, error, requestId);
+                    return;
+                }
+
+                if (requestId != null) {
+                    JsonRpcResponse response = new JsonRpcResponse(resultPayload, requestId);
+                    sendJsonRpcSuccessResponse(exchange, response);
+                }
+
+            } catch (Exception e) {
+                System.err.println("Internal server error: " + e.getMessage());
+                e.printStackTrace();
+                JsonRpcErrorObject error = new JsonRpcErrorObject(JsonRpcErrorCodes.INTERNAL_ERROR, "Internal server error: " + e.getMessage(), e.getClass().getName());
+                sendJsonRpcErrorResponse(exchange, error, requestId);
             }
         }
 
-        private String toJson(List<TimeReportEntry> entries) {
-            Gson gson = new GsonBuilder().create();
-            return gson.toJson(entries);
-        }
-    }
-
-    /** Handler that exposes a very small search API as JSON. */
-    class SearchHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
-                return;
-            }
-
-            URI uri = exchange.getRequestURI();
-            Map<String, String> params = parseQuery(uri.getRawQuery());
-            String query = params.getOrDefault("query", "");
-
-            List<SearchResult> results = searchMcp.search(query);
-            String json = toJson(results);
-
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
-            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+        private void sendJsonRpcSuccessResponse(HttpExchange exchange, JsonRpcResponse response) throws IOException {
+            String jsonResponseString = gson.toJson(response);
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            byte[] bytes = jsonResponseString.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(200, bytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(bytes);
             }
         }
 
-        private Map<String, String> parseQuery(String query) {
-            if (query == null || query.isEmpty()) {
-                return Map.of();
-            }
-            return Stream.of(query.split("&"))
-                    .map(s -> s.split("=", 2))
-                    .filter(arr -> arr.length == 2)
-                    .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
+        private void sendJsonRpcErrorResponse(HttpExchange exchange, JsonRpcErrorObject error, Object id) throws IOException {
+            JsonRpcResponse response = new JsonRpcResponse(error, id);
+            sendJsonRpcSuccessResponse(exchange, response); // JSON-RPC errors are still sent with HTTP 200
         }
 
-        private String toJson(List<SearchResult> results) {
-            Gson gson = new GsonBuilder().create();
-            return gson.toJson(Map.of("results", results));
-        }
-    }
-
-    /** Handler that fetches a single search result by id. */
-    class FetchHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(405, -1);
-                return;
-            }
-
-            URI uri = exchange.getRequestURI();
-            Map<String, String> params = parseQuery(uri.getRawQuery());
-            String id = params.get("id");
-
-            SearchResult result = searchMcp.fetch(id);
-            if (result == null) {
-                exchange.sendResponseHeaders(404, -1);
-                return;
-            }
-
-            String json = toJson(result);
-
-            exchange.getResponseHeaders().set("Content-Type", "application/json");
-            byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
-            exchange.sendResponseHeaders(200, bytes.length);
+        private void sendHttpErrorResponse(HttpExchange exchange, int statusCode, String errorMessage) throws IOException {
+            Map<String, String> errorPayload = Map.of("error", errorMessage, "note", "This is an HTTP-level error, not a JSON-RPC structured error.");
+            String jsonResponse = gson.toJson(errorPayload);
+            exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+            byte[] bytes = jsonResponse.getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(statusCode, bytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(bytes);
             }
-        }
-
-        private Map<String, String> parseQuery(String query) {
-            if (query == null || query.isEmpty()) {
-                return Map.of();
-            }
-            return Stream.of(query.split("&"))
-                    .map(s -> s.split("=", 2))
-                    .filter(arr -> arr.length == 2)
-                    .collect(Collectors.toMap(arr -> arr[0], arr -> arr[1]));
-        }
-
-        private String toJson(SearchResult result) {
-            Gson gson = new GsonBuilder().create();
-            return gson.toJson(result);
         }
     }
 

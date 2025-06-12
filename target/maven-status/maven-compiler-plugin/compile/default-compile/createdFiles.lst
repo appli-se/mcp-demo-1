@@ -1,10 +1,12 @@
 com/example/mcp/TimeReportMCP.class
 com/example/mcp/SearchResult.class
-com/example/mcp/TimeReportMCPServer$FetchHandler.class
 com/example/mcp/TimeReportMCPServer.class
-com/example/mcp/TimeReportMCPServer$SearchHandler.class
+com/example/mcp/JsonRpcRequest.class
+com/example/mcp/JsonRpcErrorObject.class
 com/example/mcp/TimeReportEntry.class
-com/example/mcp/TimeReportMCPServer$TimeReportHandler.class
+com/example/mcp/TimeReportMCPServer$MainSsePostHandler.class
 com/example/mcp/TimeReportMCPServer$ManifestHandler.class
+com/example/mcp/JsonRpcErrorCodes.class
+com/example/mcp/JsonRpcResponse.class
 com/example/mcp/SearchMCP.class
 com/example/mcp/TimeReportMCPServer$LoggingHandler.class

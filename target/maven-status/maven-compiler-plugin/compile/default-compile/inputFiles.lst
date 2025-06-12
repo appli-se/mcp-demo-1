@@ -1,5 +1,9 @@
+/app/src/main/java/com/example/mcp/JsonRpcRequest.java
+/app/src/main/java/com/example/mcp/JsonRpcResponse.java
+/app/src/main/java/com/example/mcp/JsonRpcErrorObject.java
 /app/src/main/java/com/example/mcp/TimeReportMCP.java
 /app/src/main/java/com/example/mcp/TimeReportMCPServer.java
 /app/src/main/java/com/example/mcp/SearchMCP.java
 /app/src/main/java/com/example/mcp/TimeReportEntry.java
 /app/src/main/java/com/example/mcp/SearchResult.java
+/app/src/main/java/com/example/mcp/JsonRpcErrorCodes.java
